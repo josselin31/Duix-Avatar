@@ -4,6 +4,14 @@ import { refreshJobStatus } from "@/lib/job-runtime";
 
 export const dynamic = "force-dynamic";
 
+function toClientJob(job) {
+  return {
+    ...job,
+    sourceMarkdownUrl: `/api/jobs/${job.id}/asset?type=source`,
+    outputVideoUrl: job.status === "completed" ? `/api/jobs/${job.id}/asset?type=video` : ""
+  };
+}
+
 export async function GET(request, { params }) {
   try {
     const { searchParams } = new URL(request.url);
@@ -19,7 +27,7 @@ export async function GET(request, { params }) {
     }
 
     const responseJob = shouldRefresh ? await refreshJobStatus(job) : job;
-    return NextResponse.json({ job: responseJob });
+    return NextResponse.json({ job: toClientJob(responseJob) });
   } catch (error) {
     return NextResponse.json({ error: error.message || "Unable to retrieve job." }, { status: 500 });
   }

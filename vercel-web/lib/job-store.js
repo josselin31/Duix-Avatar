@@ -1,4 +1,4 @@
-import { del, list, put } from "@vercel/blob";
+import { del, get, list, put } from "@vercel/blob";
 import { isExpired, nowIso } from "./config";
 
 function jobPrefix(id) {
@@ -17,6 +17,10 @@ function outputVideoPath(id) {
   return `${jobPrefix(id)}/output.mp4`;
 }
 
+function blobAccessMode() {
+  return process.env.BLOB_OBJECT_ACCESS === "public" ? "public" : "private";
+}
+
 async function listAllBlobs(prefix) {
   let cursor;
   const all = [];
@@ -33,12 +37,16 @@ async function listAllBlobs(prefix) {
   return all;
 }
 
-async function readJsonBlob(url) {
-  const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) {
-    throw new Error(`Unable to read blob JSON: ${res.status}`);
+async function readJsonBlob(pathname) {
+  const blob = await get(pathname, {
+    access: blobAccessMode(),
+    token: process.env.BLOB_READ_WRITE_TOKEN
+  });
+  if (!blob || !blob.stream) {
+    throw new Error("Unable to read blob JSON stream.");
   }
-  return res.json();
+  const body = await new Response(blob.stream).text();
+  return JSON.parse(body);
 }
 
 export function buildSourceMarkdown(text) {
@@ -55,7 +63,7 @@ export function buildSourceMarkdown(text) {
 
 export async function saveSourceMarkdown(id, markdown) {
   return put(sourceMdPath(id), markdown, {
-    access: "public",
+    access: blobAccessMode(),
     addRandomSuffix: false,
     contentType: "text/markdown; charset=utf-8"
   });
@@ -63,8 +71,9 @@ export async function saveSourceMarkdown(id, markdown) {
 
 export async function saveJobRecord(job) {
   const saved = await put(jobJsonPath(job.id), JSON.stringify(job, null, 2), {
-    access: "public",
+    access: blobAccessMode(),
     addRandomSuffix: false,
+    allowOverwrite: true,
     contentType: "application/json; charset=utf-8"
   });
   return { ...job, jobJsonUrl: saved.url };
@@ -79,7 +88,7 @@ export async function createInitialJobRecord({ id, text, sourceMarkdownUrl, open
     updatedAt: createdAt,
     sourceText: text,
     previewText: `${text.slice(0, 140)}${text.length > 140 ? "..." : ""}`,
-    sourceMarkdownUrl,
+    sourceMarkdownUrl: sourceMarkdownUrl || "",
     sourceMarkdownPath: sourceMdPath(id),
     openaiVideoId,
     outputVideoPath: outputVideoPath(id),
@@ -89,12 +98,11 @@ export async function createInitialJobRecord({ id, text, sourceMarkdownUrl, open
 }
 
 export async function getJobRecord(id) {
-  const exact = await list({
-    prefix: jobJsonPath(id)
-  });
-  const blob = (exact.blobs || []).find((item) => item.pathname === jobJsonPath(id));
-  if (!blob) return null;
-  return readJsonBlob(blob.url);
+  try {
+    return await readJsonBlob(jobJsonPath(id));
+  } catch {
+    return null;
+  }
 }
 
 export async function listJobRecords({ refreshExpired = false } = {}) {
@@ -104,7 +112,7 @@ export async function listJobRecords({ refreshExpired = false } = {}) {
 
   for (const blob of jobBlobs) {
     try {
-      const job = await readJsonBlob(blob.url);
+      const job = await readJsonBlob(blob.pathname);
       if (!refreshExpired && isExpired(job.createdAt)) {
         continue;
       }
@@ -120,8 +128,9 @@ export async function listJobRecords({ refreshExpired = false } = {}) {
 
 export async function saveOutputVideo(id, videoBuffer) {
   return put(outputVideoPath(id), videoBuffer, {
-    access: "public",
+    access: blobAccessMode(),
     addRandomSuffix: false,
+    allowOverwrite: true,
     contentType: "video/mp4"
   });
 }

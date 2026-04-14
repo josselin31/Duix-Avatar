@@ -16,13 +16,21 @@ function normalizeText(value) {
     .trim();
 }
 
+function toClientJob(job) {
+  return {
+    ...job,
+    sourceMarkdownUrl: `/api/jobs/${job.id}/asset?type=source`,
+    outputVideoUrl: job.status === "completed" ? `/api/jobs/${job.id}/asset?type=video` : ""
+  };
+}
+
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const shouldRefresh = searchParams.get("refresh") === "1";
     const jobs = await listJobRecords();
     if (!shouldRefresh) {
-      return NextResponse.json({ jobs });
+      return NextResponse.json({ jobs: jobs.map(toClientJob) });
     }
 
     const refreshed = [];
@@ -35,7 +43,7 @@ export async function GET(request) {
     }
 
     refreshed.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    return NextResponse.json({ jobs: refreshed });
+    return NextResponse.json({ jobs: refreshed.map(toClientJob) });
   } catch (error) {
     return NextResponse.json({ error: error.message || "Unable to list jobs." }, { status: 500 });
   }
@@ -46,8 +54,8 @@ export async function POST(request) {
     const payload = await request.json();
     const text = normalizeText(payload?.text);
 
-    if (!text || text.length < 10) {
-      return NextResponse.json({ error: "Le texte doit faire au moins 10 caractères." }, { status: 400 });
+    if (!text || text.length < 1) {
+      return NextResponse.json({ error: "Le texte ne peut pas être vide." }, { status: 400 });
     }
     if (text.length > 4000) {
       return NextResponse.json({ error: "Le texte est trop long (max 4000 caractères)." }, { status: 400 });
@@ -56,7 +64,7 @@ export async function POST(request) {
     const id = crypto.randomUUID().replace(/-/g, "");
     const markdown = buildSourceMarkdown(text);
     const sourceBlob = await saveSourceMarkdown(id, markdown);
-    const videoPrompt = toVideoPrompt(text);
+    const videoPrompt = await toVideoPrompt(text);
     const videoJob = await createVideoJob(videoPrompt);
 
     const job = await createInitialJobRecord({
@@ -67,7 +75,7 @@ export async function POST(request) {
       status: videoJob.status || "queued"
     });
 
-    return NextResponse.json({ job }, { status: 201 });
+    return NextResponse.json({ job: toClientJob(job) }, { status: 201 });
   } catch (error) {
     return NextResponse.json({ error: error.message || "Unable to create job." }, { status: 500 });
   }
