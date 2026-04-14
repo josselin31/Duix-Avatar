@@ -1,4 +1,4 @@
-# 🚀🚀🚀 Duix Avatar — Truly open-source AI avatar toolkit for offline video generation and digital human cloning
+# 🚀🚀 Duix Avatar — Truly open-source AI avatar toolkit for offline video generation and digital human cloning
 
 🔗 **Office website:** [www.duix.com](http://www.duix.com)
 
