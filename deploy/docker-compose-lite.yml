@@ -10,7 +10,7 @@ services:
     runtime: nvidia
     privileged: true
     volumes:
-      - d:/duix_avatar_data/face2face:/code/data
+      - c:/duix_avatar_data/face2face:/code/data
     environment:
       - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
     deploy:
