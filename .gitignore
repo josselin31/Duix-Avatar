@@ -10,3 +10,4 @@ CONTENT_CREATION/GENERATED/
 CONTENT_CREATION/__pycache__/
 vercel-web/.next/
 vercel-web/node_modules/
+.vercel
